@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-ADVANCED PORT SCANNER V2.0 (FIXED)
+ADVANCED PORT SCANNER V2.1 (With CLI Arguments)
 Day 2 - Cybersecurity Learning Project
 
-Features:
-- Multi-threading (super fast!)
-- Service detection
-- Banner grabbing
-- Save results to file (TXT + CSV)
-- Progress tracking
-- Color output
-- Quick scan mode
+Usage:
+  Interactive mode:
+    python port_scanner_v2_cli.py
+  
+  Command line mode:
+    python port_scanner_v2_cli.py --target 192.168.1.87
+    python port_scanner_v2_cli.py --target scanme.nmap.org --quick
+    python port_scanner_v2_cli.py --target 192.168.1.1 --range 1 1000
+    python port_scanner_v2_cli.py -t 192.168.1.87 -p 1-100 --banner
 """
 
 import socket
@@ -18,6 +19,7 @@ import sys
 from datetime import datetime
 import threading
 from queue import Queue
+import argparse
 
 # ===== COLOR CODES =====
 class Colors:
@@ -25,23 +27,17 @@ class Colors:
     RED = '\033[91m'
     YELLOW = '\033[93m'
     BLUE = '\033[94m'
-    MAGENTA = '\033[95m'
     CYAN = '\033[96m'
-    WHITE = '\033[97m'
     RESET = '\033[0m'
     BOLD = '\033[1m'
 
 # ===== PORT DATABASE =====
 COMMON_PORTS = {
     20: "FTP-DATA", 21: "FTP", 22: "SSH", 23: "Telnet",
-    25: "SMTP", 53: "DNS", 69: "TFTP", 80: "HTTP",
-    110: "POP3", 123: "NTP", 135: "MSRPC", 139: "NetBIOS",
-    143: "IMAP", 161: "SNMP", 443: "HTTPS", 445: "SMB",
-    465: "SMTPS", 514: "Syslog", 587: "SMTP", 993: "IMAPS",
-    995: "POP3S", 1433: "MSSQL", 1521: "Oracle", 2049: "NFS",
-    3306: "MySQL", 3389: "RDP", 5432: "PostgreSQL", 5900: "VNC",
-    6379: "Redis", 8000: "HTTP-Alt", 8080: "HTTP-Proxy",
-    8443: "HTTPS-Alt", 9200: "Elasticsearch", 27017: "MongoDB"
+    25: "SMTP", 53: "DNS", 80: "HTTP", 110: "POP3",
+    143: "IMAP", 443: "HTTPS", 445: "SMB", 3306: "MySQL",
+    3389: "RDP", 5432: "PostgreSQL", 5900: "VNC",
+    8080: "HTTP-Proxy", 8443: "HTTPS-Alt"
 }
 
 # ===== GLOBAL VARIABLES =====
@@ -53,13 +49,9 @@ total_ports = 0
 # ===== HELPER FUNCTIONS =====
 
 def get_service_name(port):
-    """Map port number to service name"""
     return COMMON_PORTS.get(port, "Unknown")
 
 def grab_banner(target, port):
-    """
-    Try to grab banner from service
-    """
     try:
         sock = socket.socket()
         sock.settimeout(2)
@@ -71,7 +63,6 @@ def grab_banner(target, port):
         return None
 
 def resolve_hostname(target):
-    """Resolve hostname to IP address"""
     try:
         ip = socket.gethostbyname(target)
         return ip
@@ -80,7 +71,6 @@ def resolve_hostname(target):
         sys.exit()
 
 def save_to_txt(target, ip, open_ports, filename=None):
-    """Save scan results to text file"""
     if filename is None:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"scan_{target.replace('.', '_')}_{timestamp}.txt"
@@ -113,7 +103,6 @@ def save_to_txt(target, ip, open_ports, filename=None):
         return None
 
 def save_to_csv(target, ip, open_ports, filename=None):
-    """Save scan results to CSV format"""
     if filename is None:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"scan_{target.replace('.', '_')}_{timestamp}.csv"
@@ -138,7 +127,6 @@ def save_to_csv(target, ip, open_ports, filename=None):
 # ===== SCANNING FUNCTIONS =====
 
 def scan_port(target, port, grab_banners=False):
-    """Scan single port with optional banner grabbing"""
     global scanned_count
     
     try:
@@ -147,7 +135,6 @@ def scan_port(target, port, grab_banners=False):
         result = sock.connect_ex((target, port))
         sock.close()
         
-        # Update progress
         with print_lock:
             scanned_count += 1
             if total_ports > 0:
@@ -176,11 +163,9 @@ def scan_port(target, port, grab_banners=False):
     except:
         pass
 
-def quick_scan(target, grab_banners=False):
-    """Quick scan of most common ports only"""
+def quick_scan(target, grab_banners=False, auto_save=False):
     global scanned_count, total_ports, open_ports
     
-    # Reset globals
     scanned_count = 0
     open_ports = []
     
@@ -188,44 +173,34 @@ def quick_scan(target, grab_banners=False):
               3306, 3389, 5432, 5900, 8080, 8443]
     
     total_ports = len(common)
-    
-    # Resolve target
     ip = resolve_hostname(target)
     
-    # Print header
     print("\n" + Colors.BOLD + "="*80)
-    print(f"           QUICK PORT SCAN (Most Common Ports)")
+    print(f"           QUICK PORT SCAN")
     print("="*80 + Colors.RESET)
-    print(f"{Colors.CYAN}🎯 Target Hostname: {target}{Colors.RESET}")
-    print(f"{Colors.CYAN}🎯 Target IP: {ip}{Colors.RESET}")
+    print(f"{Colors.CYAN}🎯 Target: {target} ({ip}){Colors.RESET}")
     print(f"{Colors.CYAN}📊 Scanning {total_ports} common ports{Colors.RESET}")
-    print(f"{Colors.CYAN}🔍 Banner Grab: {'Enabled' if grab_banners else 'Disabled'}{Colors.RESET}")
     print(f"{Colors.CYAN}🕐 Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{Colors.RESET}")
     print(Colors.BOLD + "="*80 + Colors.RESET + "\n")
     
     start_time = datetime.now()
     
-    # Scan each port
     for port in common:
         scan_port(ip, port, grab_banners)
     
-    # Calculate duration
     end_time = datetime.now()
     duration = (end_time - start_time).total_seconds()
     
-    # Print results
     print("\n" + Colors.BOLD + "="*80)
     print(f"                    QUICK SCAN COMPLETE!")
     print("="*80 + Colors.RESET)
     print(f"{Colors.GREEN}✅ Total Ports Scanned: {total_ports}{Colors.RESET}")
     print(f"{Colors.GREEN}✅ Open Ports Found: {len(open_ports)}{Colors.RESET}")
-    print(f"{Colors.GREEN}✅ Scan Duration: {duration:.2f} seconds{Colors.RESET}")
-    print(f"{Colors.CYAN}🕐 Finished: {end_time.strftime('%Y-%m-%d %H:%M:%S')}{Colors.RESET}")
+    print(f"{Colors.GREEN}✅ Duration: {duration:.2f} seconds{Colors.RESET}")
     print(Colors.BOLD + "="*80 + Colors.RESET + "\n")
     
-    # Summary table
     if open_ports:
-        print(Colors.BOLD + "📋 DETAILED SUMMARY:" + Colors.RESET)
+        print(Colors.BOLD + "📋 OPEN PORTS:" + Colors.RESET)
         print("-"*80)
         print(f"{'PORT':<8} {'SERVICE':<20} {'BANNER/VERSION':<50}")
         print("-"*80)
@@ -233,48 +208,40 @@ def quick_scan(target, grab_banners=False):
             banner = p['banner'][:47] + "..." if p['banner'] and len(p['banner']) > 50 else (p['banner'] or '-')
             print(f"{p['port']:<8} {p['service']:<20} {banner:<50}")
         print("-"*80 + "\n")
-    else:
-        print(f"{Colors.YELLOW}⚠️ No open ports found in quick scan.{Colors.RESET}\n")
-    
-    # Save options
-    if open_ports:
-        save = input(f"{Colors.YELLOW}💾 Save results? (yes/no): {Colors.RESET}").lower()
-        if save == 'yes':
+        
+        if auto_save:
             save_to_txt(target, ip, open_ports)
             save_to_csv(target, ip, open_ports)
+        else:
+            save = input(f"{Colors.YELLOW}💾 Save results? (yes/no): {Colors.RESET}").lower()
+            if save == 'yes':
+                save_to_txt(target, ip, open_ports)
+                save_to_csv(target, ip, open_ports)
     
     return open_ports
 
-def threaded_scan(target, port_range, threads=100, grab_banners=False):
-    """Multi-threaded port scanner"""
+def threaded_scan(target, port_range, threads=100, grab_banners=False, auto_save=False):
     global scanned_count, total_ports, open_ports
     
-    # Reset globals
     scanned_count = 0
     open_ports = []
     total_ports = port_range[1] - port_range[0] + 1
     
-    # Resolve target
     ip = resolve_hostname(target)
     
-    # Print header
     print("\n" + Colors.BOLD + "="*80)
-    print(f"           ADVANCED PORT SCANNER V2.0")
+    print(f"           PORT SCANNER")
     print("="*80 + Colors.RESET)
-    print(f"{Colors.CYAN}🎯 Target Hostname: {target}{Colors.RESET}")
-    print(f"{Colors.CYAN}🎯 Target IP: {ip}{Colors.RESET}")
-    print(f"{Colors.CYAN}📊 Port Range: {port_range[0]}-{port_range[1]} ({total_ports} ports){Colors.RESET}")
+    print(f"{Colors.CYAN}🎯 Target: {target} ({ip}){Colors.RESET}")
+    print(f"{Colors.CYAN}📊 Range: {port_range[0]}-{port_range[1]} ({total_ports} ports){Colors.RESET}")
     print(f"{Colors.CYAN}🧵 Threads: {threads}{Colors.RESET}")
-    print(f"{Colors.CYAN}🔍 Banner Grab: {'Enabled' if grab_banners else 'Disabled'}{Colors.RESET}")
     print(f"{Colors.CYAN}🕐 Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{Colors.RESET}")
     print(Colors.BOLD + "="*80 + Colors.RESET + "\n")
     
-    # Create port queue
     port_queue = Queue()
     for port in range(port_range[0], port_range[1] + 1):
         port_queue.put(port)
     
-    # Worker function
     def worker():
         while not port_queue.empty():
             try:
@@ -284,7 +251,6 @@ def threaded_scan(target, port_range, threads=100, grab_banners=False):
             except:
                 break
     
-    # Start threads
     start_time = datetime.now()
     
     thread_list = []
@@ -294,31 +260,25 @@ def threaded_scan(target, port_range, threads=100, grab_banners=False):
         t.start()
         thread_list.append(t)
     
-    # Wait for completion
     try:
         port_queue.join()
     except KeyboardInterrupt:
-        print(f"\n\n{Colors.YELLOW}⚠️ Scan interrupted by user!{Colors.RESET}")
+        print(f"\n\n{Colors.YELLOW}⚠️ Scan interrupted!{Colors.RESET}")
         sys.exit()
     
-    # Calculate duration
     end_time = datetime.now()
     duration = (end_time - start_time).total_seconds()
     
-    # Print results
     print("\n" + Colors.BOLD + "="*80)
     print(f"                    SCAN COMPLETE!")
     print("="*80 + Colors.RESET)
-    print(f"{Colors.GREEN}✅ Total Ports Scanned: {total_ports}{Colors.RESET}")
-    print(f"{Colors.GREEN}✅ Open Ports Found: {len(open_ports)}{Colors.RESET}")
-    print(f"{Colors.GREEN}✅ Scan Duration: {duration:.2f} seconds{Colors.RESET}")
-    print(f"{Colors.GREEN}✅ Speed: {total_ports/duration:.1f} ports/second{Colors.RESET}")
-    print(f"{Colors.CYAN}🕐 Finished: {end_time.strftime('%Y-%m-%d %H:%M:%S')}{Colors.RESET}")
+    print(f"{Colors.GREEN}✅ Scanned: {total_ports} ports{Colors.RESET}")
+    print(f"{Colors.GREEN}✅ Open: {len(open_ports)} ports{Colors.RESET}")
+    print(f"{Colors.GREEN}✅ Duration: {duration:.2f}s ({total_ports/duration:.1f} ports/s){Colors.RESET}")
     print(Colors.BOLD + "="*80 + Colors.RESET + "\n")
     
-    # Summary table
     if open_ports:
-        print(Colors.BOLD + "📋 DETAILED SUMMARY:" + Colors.RESET)
+        print(Colors.BOLD + "📋 OPEN PORTS:" + Colors.RESET)
         print("-"*80)
         print(f"{'PORT':<8} {'SERVICE':<20} {'BANNER/VERSION':<50}")
         print("-"*80)
@@ -326,37 +286,99 @@ def threaded_scan(target, port_range, threads=100, grab_banners=False):
             banner = p['banner'][:47] + "..." if p['banner'] and len(p['banner']) > 50 else (p['banner'] or '-')
             print(f"{p['port']:<8} {p['service']:<20} {banner:<50}")
         print("-"*80 + "\n")
-    
-    # Save options
-    if open_ports:
-        save = input(f"{Colors.YELLOW}💾 Save results? (yes/no): {Colors.RESET}").lower()
-        if save == 'yes':
+        
+        if auto_save:
             save_to_txt(target, ip, open_ports)
             save_to_csv(target, ip, open_ports)
+        else:
+            save = input(f"{Colors.YELLOW}💾 Save results? (yes/no): {Colors.RESET}").lower()
+            if save == 'yes':
+                save_to_txt(target, ip, open_ports)
+                save_to_csv(target, ip, open_ports)
     
     return open_ports
 
 # ===== MAIN PROGRAM =====
 
 def print_banner():
-    """Print cool ASCII banner"""
     print(f"""
 {Colors.CYAN}{Colors.BOLD}
     ╔═══════════════════════════════════════════════════════════╗
-    ║                                                           ║
-    ║          ADVANCED PORT SCANNER V2.0                       ║
-    ║          Day 2 - Cybersecurity Learning                   ║
-    ║                                                           ║
-    ║          Features: Multi-thread, Banner Grab, Export      ║
-    ║                                                           ║
+    ║          ADVANCED PORT SCANNER V2.1                       ║
+    ║          With Command Line Arguments Support              ║
     ╚═══════════════════════════════════════════════════════════╝
 {Colors.RESET}
     """)
 
 def main():
-    """Main program flow"""
     print_banner()
     
+    # Setup argument parser
+    parser = argparse.ArgumentParser(
+        description='Advanced Port Scanner V2.1',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  Quick scan:
+    python %(prog)s --target scanme.nmap.org --quick
+    
+  Range scan:
+    python %(prog)s -t 192.168.1.1 -p 1-1000
+    python %(prog)s --target 192.168.1.87 --range 1 100
+    
+  With banner grabbing:
+    python %(prog)s -t 192.168.1.1 -p 1-100 --banner
+    
+  Auto-save results:
+    python %(prog)s -t scanme.nmap.org --quick --save
+        """
+    )
+    
+    parser.add_argument('-t', '--target', help='Target IP or hostname')
+    parser.add_argument('-p', '--ports', help='Port range (e.g., 1-1000 or 80,443,8080)')
+    parser.add_argument('-r', '--range', nargs=2, type=int, metavar=('START', 'END'), 
+                       help='Port range (e.g., --range 1 1000)')
+    parser.add_argument('-q', '--quick', action='store_true', help='Quick scan (16 common ports)')
+    parser.add_argument('-b', '--banner', action='store_true', help='Enable banner grabbing')
+    parser.add_argument('-s', '--save', action='store_true', help='Auto-save results')
+    parser.add_argument('--threads', type=int, default=100, help='Number of threads (default: 100)')
+    
+    args = parser.parse_args()
+    
+    # If no arguments, run interactive mode
+    if len(sys.argv) == 1:
+        interactive_mode()
+        return
+    
+    # Validate target
+    if not args.target:
+        print(f"{Colors.RED}❌ Error: Target required! Use -t or --target{Colors.RESET}")
+        print(f"\nExample: python {sys.argv[0]} -t 192.168.1.87 --quick")
+        sys.exit(1)
+    
+    # Execute scan
+    if args.quick:
+        quick_scan(args.target, grab_banners=args.banner, auto_save=args.save)
+    elif args.range:
+        threaded_scan(args.target, tuple(args.range), threads=args.threads, 
+                     grab_banners=args.banner, auto_save=args.save)
+    elif args.ports:
+        # Parse port range
+        if '-' in args.ports:
+            start, end = map(int, args.ports.split('-'))
+            threaded_scan(args.target, (start, end), threads=args.threads,
+                         grab_banners=args.banner, auto_save=args.save)
+        else:
+            # Specific ports
+            ports = [int(p) for p in args.ports.split(',')]
+            # Scan specific ports (not implemented yet)
+            print(f"{Colors.YELLOW}Specific port scanning coming soon!{Colors.RESET}")
+    else:
+        print(f"{Colors.YELLOW}No scan mode specified. Use --quick or --range{Colors.RESET}")
+        print(f"Example: python {sys.argv[0]} -t {args.target} --quick")
+
+def interactive_mode():
+    """Original interactive mode"""
     print(f"{Colors.YELLOW}Choose scan mode:{Colors.RESET}")
     print(f"  {Colors.GREEN}1.{Colors.RESET} Quick Scan (16 most common ports) {Colors.CYAN}← FAST{Colors.RESET}")
     print(f"  {Colors.GREEN}2.{Colors.RESET} Range Scan (Specify custom range)")
@@ -370,51 +392,30 @@ def main():
         print(f"{Colors.CYAN}👋 Goodbye!{Colors.RESET}")
         sys.exit()
     
-    # Get target
     target = input(f"\n{Colors.YELLOW}Enter target (IP or hostname): {Colors.RESET}").strip()
     if not target:
         print(f"{Colors.RED}❌ Target required!{Colors.RESET}")
         return
     
-    # Get banner option
-    grab_banners = input(f"{Colors.YELLOW}Grab banners? (yes/no, default: no): {Colors.RESET}").lower() == 'yes'
+    grab_banners = input(f"{Colors.YELLOW}Grab banners? (yes/no): {Colors.RESET}").lower() == 'yes'
     
-    # Execute based on choice
     if choice == '1':
         quick_scan(target, grab_banners)
-        
     elif choice == '2':
-        start = int(input(f"{Colors.YELLOW}Start port (default 1): {Colors.RESET}") or 1)
-        end = int(input(f"{Colors.YELLOW}End port (default 1000): {Colors.RESET}") or 1000)
-        threads = int(input(f"{Colors.YELLOW}Number of threads (default 100): {Colors.RESET}") or 100)
-        
-        if start < 1 or end > 65535 or start > end:
-            print(f"{Colors.RED}❌ Invalid port range!{Colors.RESET}")
-            return
-        
+        start = int(input(f"{Colors.YELLOW}Start port: {Colors.RESET}") or 1)
+        end = int(input(f"{Colors.YELLOW}End port: {Colors.RESET}") or 1000)
+        threads = int(input(f"{Colors.YELLOW}Threads (default 100): {Colors.RESET}") or 100)
         threaded_scan(target, (start, end), threads, grab_banners)
-        
     elif choice == '3':
-        print(f"\n{Colors.RED}⚠️ WARNING: Full scan of 65535 ports will take 10-20 minutes!{Colors.RESET}")
-        confirm = input(f"{Colors.YELLOW}Continue? (type 'YES' in capitals): {Colors.RESET}")
+        confirm = input(f"{Colors.RED}⚠️ Full scan takes 10-20 min! Type 'YES': {Colors.RESET}")
         if confirm == 'YES':
-            threaded_scan(target, (1, 65535), threads=200, grab_banners=grab_banners)
-        else:
-            print(f"{Colors.YELLOW}Scan cancelled.{Colors.RESET}")
-            
+            threaded_scan(target, (1, 65535), 200, grab_banners)
     elif choice == '4':
-        threaded_scan(target, (1, 1024), threads=100, grab_banners=grab_banners)
-        
-    else:
-        print(f"{Colors.RED}❌ Invalid choice!{Colors.RESET}")
+        threaded_scan(target, (1, 1024), 100, grab_banners)
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n\n{Colors.YELLOW}⚠️ Program interrupted!{Colors.RESET}")
-        print(f"{Colors.CYAN}👋 Goodbye!{Colors.RESET}")
-        sys.exit()
-    except Exception as e:
-        print(f"\n{Colors.RED}❌ Error: {e}{Colors.RESET}")
+        print(f"\n\n{Colors.YELLOW}⚠️ Interrupted!{Colors.RESET}")
         sys.exit()

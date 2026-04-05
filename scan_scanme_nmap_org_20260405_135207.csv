@@ -1,0 +1,3 @@
+Port,Service,Banner,Target,IP,Scan_Date
+22,SSH,,scanme.nmap.org,45.33.32.156,2026-04-05 13:52:07
+80,HTTP,,scanme.nmap.org,45.33.32.156,2026-04-05 13:52:07
